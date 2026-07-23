@@ -8,65 +8,59 @@ st.set_page_config(
 )
 
 
-# Carregamento de Dados
+# Carregamento e Tratamento de Dados
 @st.cache_data
 def load_data():
     df = pd.read_excel("dados.xlsx")
 
-    # Padroniza nomes das colunas (remove espaços nas extremidades e deixa em minúsculas)
+    # Limpar nomes das colunas
     df.columns = [str(col).strip().lower() for col in df.columns]
 
-    # Mapeamento flexível de colunas por palavras-chave
-    col_map = {}
-    for col in df.columns:
-        if "nota" in col:
-            col_map[col] = "notas"
-        elif "turma" in col:
-            col_map[col] = "turma"
-        elif any(
-            k in col
-            for k in [
-                "componente",
-                "curricular",
-                "materia",
-                "disciplina",
-                "modulo",
-                "curso",
-            ]
-        ):
-            col_map[col] = "componente_curricular"
+    # Identificar coluna de Turma
+    col_turma = next((col for col in df.columns if "turma" in col), None)
+    if col_turma:
+        df = df.rename(columns={col_turma: "turma"})
+    else:
+        df["turma"] = "Geral"
 
-    df = df.rename(columns=col_map)
+    # Identificar primeira coluna de Componente Curricular
+    col_comp = next((col for col in df.columns if "componente" in col), None)
+    if col_comp:
+        df = df.rename(columns={col_comp: "componente_curricular"})
+    else:
+        df["componente_curricular"] = "Geral"
 
-    # Converter notas para numérico
-    if "notas" in df.columns:
-        df["notas"] = pd.to_numeric(df["notas"], errors="coerce")
+    # Identificar colunas de perguntas (avaliações numéricas)
+    cols_perguntas = [
+        col
+        for col in df.columns
+        if col not in ["carimbo de data/hora", "turma", "componente_curricular"]
+        and not col.startswith("componente_curricular.")
+    ]
 
-    return df
+    # Converter colunas de perguntas em número
+    for col in cols_perguntas:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Criar nota média por resposta
+    df["notas"] = df[cols_perguntas].mean(axis=1)
+
+    return df, cols_perguntas
 
 
-df = load_data()
-
-# --- DIAGNÓSTICO TEMPORÁRIO (Caso os nomes ainda falhem) ---
-if (
-    "componente_curricular" not in df.columns
-    or "turma" not in df.columns
-    or "notas" not in df.columns
-):
-    st.error("⚠️ Atenção: Alguma coluna necessária não foi mapeada!")
-    st.write("As colunas detectadas no seu Excel foram:")
-    st.write(list(df.columns))
-    st.stop()
+df, cols_perguntas = load_data()
 
 # --- BARRA LATERAL: FILTROS ---
 st.sidebar.header("🔍 Filtros")
 
 # Filtro de Turma
-turmas = ["Todas"] + list(df["turma"].dropna().unique())
+turmas = ["Todas"] + sorted(list(df["turma"].dropna().unique()))
 turma_selecionada = st.sidebar.selectbox("Selecione a Turma:", turmas)
 
 # Filtro de Componente Curricular
-componentes = ["Todos"] + list(df["componente_curricular"].dropna().unique())
+componentes = ["Todos"] + sorted(
+    list(df["componente_curricular"].dropna().unique())
+)
 componente_selecionado = st.sidebar.selectbox(
     "Selecione o Componente Curricular:", componentes
 )
@@ -88,7 +82,9 @@ st.markdown("---")
 
 # --- INDICADORES CHAVE (KPIs) ---
 total_respostas = len(df_filtrado)
-media_geral = df_filtrado["notas"].mean() if total_respostas > 0 else 0
+media_geral = (
+    df_filtrado["notas"].mean() if total_respostas > 0 else 0
+)
 satisfacao = (
     ((df_filtrado["notas"] >= 4).sum() / total_respostas * 100)
     if total_respostas > 0
@@ -96,48 +92,43 @@ satisfacao = (
 )
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Total de Respostas", f"{total_respostas:,}")
-col2.metric("Nota Média Geral (1 a 5)", f"{media_geral:.2f}")
-col3.metric("Satisfação (Notas 4 e 5)", f"{satisfacao:.1f}%")
+col1.metric("Total de Avaliações", f"{total_respostas:,}")
+col2.metric("Média Geral de Satisfação", f"{media_geral:.2f} / 5.0")
+col3.metric("Taxa de Satisfação (Notas ≥ 4)", f"{satisfacao:.1f}%")
 
 st.markdown("---")
 
-# --- VISUALIZAÇÕES E GRÁFICOS ---
-st.subheader("📈 Visão Geral e Distribuições")
-g1, g2 = st.columns(2)
+# --- VISUALIZAÇÕES PRINCIPAIS ---
+st.subheader("📈 Análise de Satisfação por Pergunta")
 
-with g1:
-    df_notas_count = (
-        df_filtrado["notas"]
-        .value_counts()
-        .reset_index()
-        .sort_values(by="notas")
-    )
-    fig_notas = px.bar(
-        df_notas_count,
-        x="notas",
-        y="count",
-        title="Distribuição Geral das Notas (1 a 5)",
-        labels={"notas": "Nota", "count": "Quantidade"},
-        text_auto=True,
-    )
-    st.plotly_chart(fig_notas, use_container_width=True)
+# Média individual de cada pergunta do formulário
+df_perguntas_mean = (
+    df_filtrado[cols_perguntas]
+    .mean()
+    .reset_index()
+    .rename(columns={"index": "Pergunta", 0: "Média"})
+)
+df_perguntas_mean["Pergunta"] = df_perguntas_mean["Pergunta"].str.capitalize()
+df_perguntas_mean = df_perguntas_mean.sort_values(by="Média", ascending=True)
 
-with g2:
-    df_turma_count = df_filtrado["turma"].value_counts().reset_index().head(10)
-    fig_turma = px.bar(
-        df_turma_count,
-        x="turma",
-        y="count",
-        title="Volume de Respostas por Turma",
-        labels={"turma": "Turma", "count": "Quantidade"},
-        text_auto=True,
-    )
-    st.plotly_chart(fig_turma, use_container_width=True)
+fig_perguntas = px.bar(
+    df_perguntas_mean,
+    x="Média",
+    y="Pergunta",
+    orientation="h",
+    title="Média de Pontuação por Critério Avaliado",
+    labels={"Média": "Nota Média (1 a 5)", "Pergunta": "Critério / Pergunta"},
+    text_auto=".2f",
+    color="Média",
+    color_continuous_scale="RdYlGn",
+    range_x=[0, 5],
+)
+st.plotly_chart(fig_perguntas, use_container_width=True)
 
 st.markdown("---")
 
-st.subheader("🔀 Cruzamento de Dados e Desempenho")
+# --- CRUZAMENTOS AVANÇADOS ---
+st.subheader("🔀 Desempenho por Turma e Componente Curricular")
 c1, c2 = st.columns(2)
 
 with c1:
@@ -160,20 +151,32 @@ with c1:
         text_auto=".2f",
         color="notas",
         color_continuous_scale="RdYlGn",
+        range_x=[0, 5],
     )
     st.plotly_chart(fig_comp, use_container_width=True)
 
 with c2:
-    fig_stack = px.histogram(
-        df_filtrado,
-        x="turma",
-        color=df_filtrado["notas"].astype(str),
-        title="Distribuição de Notas por Turma",
-        labels={"turma": "Turma", "color": "Nota"},
-        barmode="stack",
+    df_turma_mean = (
+        df_filtrado.groupby("turma")["notas"]
+        .mean()
+        .reset_index()
+        .sort_values(by="notas", ascending=False)
+        .head(10)
     )
-    st.plotly_chart(fig_stack, use_container_width=True)
+    fig_turma = px.bar(
+        df_turma_mean,
+        x="turma",
+        y="notas",
+        title="Média Geral por Turma",
+        labels={"turma": "Turma", "notas": "Nota Média"},
+        text_auto=".2f",
+        color="notas",
+        color_continuous_scale="RdYlGn",
+        range_y=[0, 5],
+    )
+    st.plotly_chart(fig_turma, use_container_width=True)
 
+# --- MAPA DE CALOR ---
 st.subheader("🔥 Mapa de Calor: Média de Notas (Turma × Componente)")
 pivot_df = df_filtrado.pivot_table(
     index="componente_curricular", columns="turma", values="notas", aggfunc="mean"
@@ -190,4 +193,3 @@ if not pivot_df.empty:
         aspect="auto",
     )
     st.plotly_chart(fig_heatmap, use_container_width=True)
-          
