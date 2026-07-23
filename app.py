@@ -77,9 +77,15 @@ df, cols_perguntas = load_data()
 # --- BARRA LATERAL: FILTROS ---
 st.sidebar.header("🔍 Filtros")
 
-turmas = ["Todas"] + sorted(list(df["turma"].dropna().unique()))
-turma_selecionada = st.sidebar.selectbox("Selecione a Turma:", turmas)
+# Filtro de Turmas (Multiseleção para Comparativos)
+turmas = sorted(list(df["turma"].dropna().unique()))
+turmas_selecionadas = st.sidebar.multiselect(
+    "Selecione as Turmas para Comparar:",
+    options=turmas,
+    default=turmas,  # Inicia com todas selecionadas por padrão
+)
 
+# Filtro de Componente Curricular
 componentes = ["Todos"] + sorted(
     list(df["componente_curricular"].dropna().unique())
 )
@@ -90,8 +96,10 @@ componente_selecionado = st.sidebar.selectbox(
 # Aplicação dos Filtros
 df_filtrado = df.copy()
 
-if turma_selecionada != "Todas":
-    df_filtrado = df_filtrado[df_filtrado["turma"] == turma_selecionada]
+if turmas_selecionadas:
+    df_filtrado = df_filtrado[df_filtrado["turma"].isin(turmas_selecionadas)]
+else:
+    df_filtrado = df_filtrado.iloc[0:0]
 
 if componente_selecionado != "Todos":
     df_filtrado = df_filtrado[
@@ -118,7 +126,7 @@ col3.metric("Taxa de Satisfação (Notas ≥ 4)", f"{satisfacao:.1f}%")
 
 st.markdown("---")
 
-# --- PREPARAÇÃO DOS DADOS DE AGRAGACÃO ---
+# --- PREPARAÇÃO DOS DADOS DE AGREGACÃO ---
 df_perguntas_mean = (
     df_filtrado[cols_perguntas]
     .mean()
