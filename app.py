@@ -121,6 +121,88 @@ col3.metric("Taxa de Satisfação (Notas ≥ 4)", f"{satisfacao:.1f}%")
 st.markdown("---")
 
 # --- VISUALIZAÇÕES PRINCIPAIS ---
+# --- NOVOS GRÁFICOS ANALÍTICOS ---
+st.subheader("📊 Distribuição Global e Engajamento")
+
+col_g1, col_g2 = st.columns(2)
+
+with col_g1:
+    # 1. Histograma da Distribuição das Notas
+    fig_hist = px.histogram(
+        df_filtrado,
+        x="notas",
+        nbins=10,
+        title="Distribuição Frequencial das Notas Globais",
+        labels={"notas": "Nota Atribuída", "count": "Quantidade de Respostas"},
+        color_discrete_sequence=["#2E86AB"],
+    )
+    fig_hist.update_layout(bargap=0.1)
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+with col_g2:
+    # 2. Distribuição do Volume de Respostas por Turma (Donut)
+    df_vol_turma = (
+        df_filtrado["turma"].value_counts().reset_index(name="quantidade")
+    )
+    fig_donut = px.pie(
+        df_vol_turma,
+        names="turma",
+        values="quantidade",
+        title="Proporção de Respostas por Turma",
+        hole=0.4,
+        color_discrete_sequence=px.colors.qualitative.Set3,
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+st.markdown("---")
+
+st.subheader("🎯 Comparativo de Performance com Meta")
+
+col_g3, col_g4 = st.columns(2)
+
+with col_g3:
+    # 3. Gráfico de Radar para os Critérios Didáticos
+    if not df_perguntas_mean.empty:
+        fig_radar = px.line_polar(
+            df_perguntas_mean,
+            r="Média",
+            theta="Pergunta",
+            line_close=True,
+            title="Perfil Multidimensional de Satisfação (Radar)",
+            range_r=[0, 5],
+        )
+        fig_radar.update_traces(fill="toself")
+        st.plotly_chart(fig_radar, use_container_width=True)
+
+with col_g4:
+    # 4. Desempenho dos Componentes vs. Meta (Linha de Corte 4.0)
+    fig_meta = px.bar(
+        df_comp,
+        x="componente_curricular",
+        y="notas",
+        title="Satisfação por Componente vs. Meta (4.0)",
+        labels={
+            "notas": "Média Atribuída",
+            "componente_curricular": "Componente",
+        },
+        text_auto=".2f",
+        color="notas",
+        color_continuous_scale="RdYlGn",
+        range_y=[0, 5],
+    )
+    # Adicionar linha de corte meta de nota 4.0
+    fig_meta.add_hline(
+        y=4.0,
+        line_dash="dot",
+        annotation_text="Meta (4.0)",
+        annotation_position="bottom right",
+        line_color="red",
+    )
+    st.plotly_chart(fig_meta, use_container_width=True)
+
+
+
+
 st.subheader("📈 Análise por Critério Didático")
 
 df_perguntas_mean = (
