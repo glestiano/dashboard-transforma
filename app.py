@@ -1,114 +1,168 @@
-import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-# Configuração da página
+# Configuração da Página
 st.set_page_config(
-    page_title="Dashboard - Avaliação de Curso Transforma 2026",
-    layout="wide"
+    page_title="Dashboard - Avaliação de Cursos", page_icon="📊", layout="wide"
 )
 
-# Carregamento dos dados
+
+# Carregamento de Dados
 @st.cache_data
 def load_data():
-    file_path = 'AVALIAÇÃO DE CURSO _ TRANSFORMA 2026 (respostas).xlsx'
-    df = pd.read_excel(file_path)
+    # Carrega a planilha (garanta que o nome do arquivo corresponda ao seu)
+    df = pd.read_excel("dados.xlsx")
+
+    # Padronização dos nomes das colunas para minúsculas para evitar erros
+    df.columns = df.columns.str.strip().str.lower()
+
+    # Garantir que a coluna de notas é numérica
+    df["notas"] = pd.to_numeric(df["notas"], errors="coerce")
+
     return df
+
 
 df = load_data()
 
-# Título principal
-st.title("📊 Dashboard de Avaliação de Cursos - Transforma 2026")
-st.markdown("---")
-
-# --- BARRA LATERAL (FILTROS) ---
+# --- BARRA LATERAL: FILTROS ---
 st.sidebar.header("🔍 Filtros")
 
 # Filtro de Turma
-turmas = ["Todas"] + list(df['Qual turma você fez parte no Programa de Formação?'].dropna().unique())
-turma_sel = st.sidebar.selectbox("Selecione a Turma:", turmas)
+turmas = ["Todas"] + list(df["turma"].dropna().unique())
+turma_selecionada = st.sidebar.selectbox("Selecione a Turma:", turmas)
 
 # Filtro de Componente Curricular
-componentes = ["Todos"] + list(df['Qual é o seu componente curricular?'].dropna().unique())
-comp_sel = st.sidebar.selectbox("Selecione o Componente Curricular:", componentes)
+componentes = ["Todos"] + list(df["componente curricular"].dropna().unique())
+componente_selecionado = st.sidebar.selectbox(
+    "Selecione o Componente Curricular:", componentes
+)
 
-# Aplicando os filtros ao DataFrame
-df_filtered = df.copy()
+# Aplicação dos Filtros
+df_filtrado = df.copy()
 
-if turma_sel != "Todas":
-    df_filtered = df_filtered[df_filtered['Qual turma você fez parte no Programa de Formação?'] == turma_sel]
+if turma_selecionada != "Todas":
+    df_filtrado = df_filtrado[df_filtrado["turma"] == turma_selecionada]
 
-if comp_sel != "Todos":
-    df_filtered = df_filtered[df_filtered['Qual é o seu componente curricular?'] == comp_sel]
+if componente_selecionado != "Todos":
+    df_filtrado = df_filtrado[
+        df_filtrado["componente curricular"] == componente_selecionado
+    ]
 
-# --- CARTÕES DE MÉTRICAS (KPIs) ---
+# --- TÍTULO PRINCIPAL ---
+st.title("📊 Dashboard de Avaliação de Cursos - Transforma 2026")
+st.markdown("---")
+
+# --- INDICADORES CHAVE (KPIs) ---
+total_respostas = len(df_filtrado)
+media_geral = df_filtrado["notas"].mean()
+satisfacao = (
+    (df_filtrado["notas"] >= 4).sum() / total_respostas * 100
+    if total_respostas > 0
+    else 0
+)
+
 col1, col2, col3 = st.columns(3)
-
-total_respostas = len(df_filtered)
-media_avaliacao = df_filtered['Em uma escala de 1 a 5, como você avalia este curso de forma geral?'].mean()
-perc_satisfacao = (df_filtered['Em uma escala de 1 a 5, como você avalia este curso de forma geral?'] >= 4).mean() * 100
-
-with col1:
-    st.metric("Total de Respostas", f"{total_respostas:,}")
-
-with col2:
-    st.metric("Nota Média Geral (1 a 5)", f"{media_avaliacao:.2f}" if not pd.isna(media_avaliacao) else "N/A")
-
-with col3:
-    st.metric("Satisfação (Notas 4 e 5)", f"{perc_satisfacao:.1f}%" if not pd.isna(perc_satisfacao) else "N/A")
+col1.metric("Total de Respostas", f"{total_respostas:,}")
+col2.metric("Nota Média Geral (1 a 5)", f"{media_geral:.2f}")
+col3.metric("Satisfação (Notas 4 e 5)", f"{satisfacao:.1f}%")
 
 st.markdown("---")
 
-# --- GRÁFICOS ---
-c1, c2 = st.columns(2)
+# --- CRUZAMENTOS DE DADOS - PARTE 1 ---
+st.subheader("📈 Visão Geral e Distribuições")
+g1, g2 = st.columns(2)
 
-# Gráfico 1: Distribuição das Avaliações Gerais
-with c1:
-    fig_eval = px.histogram(
-        df_filtered,
-        x='Em uma escala de 1 a 5, como você avalia este curso de forma geral?',
-        title="Distribuição das Notas (1 a 5)",
-        labels={'Em uma escala de 1 a 5, como você avalia este curso de forma geral?': 'Nota'},
-        color_discrete_sequence=['#1f77b4'],
-        text_auto=True
+with g1:
+    # 1. Distribuição Geral das Notas
+    df_notas_count = (
+        df_filtrado["notas"].value_counts().reset_index().sort_values(by="notas")
     )
-    fig_eval.update_layout(bargap=0.2, yaxis_title="Quantidade")
-    st.plotly_chart(fig_eval, use_container_width=True)
+    fig_notas = px.bar(
+        df_notas_count,
+        x="notas",
+        y="count",
+        title="Distribuição Geral das Notas (1 a 5)",
+        labels={"notas": "Nota", "count": "Quantidade"},
+        text_auto=True,
+        color_discrete_sequence=["#1f77b4"],
+    )
+    st.plotly_chart(fig_notas, use_container_width=True)
 
-# Gráfico 2: Respostas por Turma
-with c2:
-    turma_counts = df_filtered['Qual turma você fez parte no Programa de Formação?'].value_counts().reset_index()
-    turma_counts.columns = ['Turma', 'Quantidade']
-    
+with g2:
+    # 2. Respostas por Turma
+    df_turma_count = (
+        df_filtrado["turma"].value_counts().reset_index().head(10)
+    )  # Top 10 turmas
     fig_turma = px.bar(
-        turma_counts,
-        x='Turma',
-        y='Quantidade',
-        title="Distribuição por Turma",
-        color='Quantidade',
-        color_continuous_scale='Blues',
-        text_auto=True
+        df_turma_count,
+        x="turma",
+        y="count",
+        title="Volume de Respostas por Turma",
+        labels={"turma": "Turma", "count": "Quantidade"},
+        text_auto=True,
+        color_discrete_sequence=["#0d3b66"],
     )
     st.plotly_chart(fig_turma, use_container_width=True)
 
-# Top Componentes Curriculares
-st.subheader("📌 Participação por Componente Curricular")
-comp_counts = df_filtered['Qual é o seu componente curricular?'].value_counts().head(10).reset_index()
-comp_counts.columns = ['Componente Curricular', 'Quantidade']
+st.markdown("---")
 
-fig_comp = px.bar(
-    comp_counts,
-    x='Quantidade',
-    y='Componente Curricular',
-    orientation='h',
-    title="Top 10 Componentes Curriculares com Mais Respostas",
-    color='Quantidade',
-    color_continuous_scale='Viridis',
-    text_auto=True
+# --- CRUZAMENTOS AVANÇADOS ---
+st.subheader("🔀 Cruzamento de Dados e Desempenho")
+c1, c2 = st.columns(2)
+
+with c1:
+    # 3. Média de Nota por Componente Curricular (Ranking)
+    df_comp = (
+        df_filtrado.groupby("componente curricular")["notas"]
+        .mean()
+        .reset_index()
+        .sort_values(by="notas", ascending=True)
+    )
+
+    fig_comp = px.bar(
+        df_comp,
+        x="notas",
+        y="componente curricular",
+        orientation="h",
+        title="Média por Componente Curricular",
+        labels={"notas": "Nota Média", "componente curricular": "Componente"},
+        text_auto=".2f",
+        color="notas",
+        color_continuous_scale="RdYlGn",
+    )
+    st.plotly_chart(fig_comp, use_container_width=True)
+
+with c2:
+    # 4. Proporção de Notas por Turma (Empilhado)
+    fig_stack = px.histogram(
+        df_filtrado,
+        x="turma",
+        color=df_filtrado["notas"].astype(str),
+        title="Distribuição de Notas (1 a 5) por Turma",
+        labels={"turma": "Turma", "color": "Nota"},
+        barmode="stack",
+    )
+    st.plotly_chart(fig_stack, use_container_width=True)
+
+# 5. MATRIZ / HEATMAP: Turma vs Componente Curricular
+st.subheader("🔥 Mapa de Calor: Média de Notas (Turma × Componente)")
+pivot_df = df_filtrado.pivot_table(
+    index="componente curricular", columns="turma", values="notas", aggfunc="mean"
 )
-fig_comp.update_layout(yaxis={'categoryorder': 'total ascending'})
-st.plotly_chart(fig_comp, use_container_width=True)
 
-# Exibição de Tabela Interativa
-with st.expander("📄 Visualizar Tabela de Dados Filtrados"):
-    st.dataframe(df_filtered)
+if not pivot_df.empty:
+    fig_heatmap = px.imshow(
+        pivot_df,
+        labels=dict(
+            x="Turma", y="Componente Curricular", color="Média da Nota"
+        ),
+        x=pivot_df.columns,
+        y=pivot_df.index,
+        color_continuous_scale="RdYlGn",
+        text_auto=".2f",
+        aspect="auto",
+    )
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+else:
+    st.info("Sem dados suficientes para gerar o mapa de calor com os filtros atuais.")
