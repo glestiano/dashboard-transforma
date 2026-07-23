@@ -57,7 +57,6 @@ def load_data():
 
     # Converter colunas de perguntas em números válidos
     for col in cols_perguntas:
-        # Tenta substituir texto da escala Likert se houver
         df[col] = (
             df[col]
             .astype(str)
@@ -65,7 +64,6 @@ def load_data():
             .str.lower()
             .replace(mapeamento_likert)
         )
-        # Converte para numérico coercitivamente (o que for inválido vira NaN)
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Criar nota média por linha de resposta
@@ -120,91 +118,7 @@ col3.metric("Taxa de Satisfação (Notas ≥ 4)", f"{satisfacao:.1f}%")
 
 st.markdown("---")
 
-# --- VISUALIZAÇÕES PRINCIPAIS ---
-# --- NOVOS GRÁFICOS ANALÍTICOS ---
-st.subheader("📊 Distribuição Global e Engajamento")
-
-col_g1, col_g2 = st.columns(2)
-
-with col_g1:
-    # 1. Histograma da Distribuição das Notas
-    fig_hist = px.histogram(
-        df_filtrado,
-        x="notas",
-        nbins=10,
-        title="Distribuição Frequencial das Notas Globais",
-        labels={"notas": "Nota Atribuída", "count": "Quantidade de Respostas"},
-        color_discrete_sequence=["#2E86AB"],
-    )
-    fig_hist.update_layout(bargap=0.1)
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-with col_g2:
-    # 2. Distribuição do Volume de Respostas por Turma (Donut)
-    df_vol_turma = (
-        df_filtrado["turma"].value_counts().reset_index(name="quantidade")
-    )
-    fig_donut = px.pie(
-        df_vol_turma,
-        names="turma",
-        values="quantidade",
-        title="Proporção de Respostas por Turma",
-        hole=0.4,
-        color_discrete_sequence=px.colors.qualitative.Set3,
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader("🎯 Comparativo de Performance com Meta")
-
-col_g3, col_g4 = st.columns(2)
-
-with col_g3:
-    # 3. Gráfico de Radar para os Critérios Didáticos
-    if not df_perguntas_mean.empty:
-        fig_radar = px.line_polar(
-            df_perguntas_mean,
-            r="Média",
-            theta="Pergunta",
-            line_close=True,
-            title="Perfil Multidimensional de Satisfação (Radar)",
-            range_r=[0, 5],
-        )
-        fig_radar.update_traces(fill="toself")
-        st.plotly_chart(fig_radar, use_container_width=True)
-
-with col_g4:
-    # 4. Desempenho dos Componentes vs. Meta (Linha de Corte 4.0)
-    fig_meta = px.bar(
-        df_comp,
-        x="componente_curricular",
-        y="notas",
-        title="Satisfação por Componente vs. Meta (4.0)",
-        labels={
-            "notas": "Média Atribuída",
-            "componente_curricular": "Componente",
-        },
-        text_auto=".2f",
-        color="notas",
-        color_continuous_scale="RdYlGn",
-        range_y=[0, 5],
-    )
-    # Adicionar linha de corte meta de nota 4.0
-    fig_meta.add_hline(
-        y=4.0,
-        line_dash="dot",
-        annotation_text="Meta (4.0)",
-        annotation_position="bottom right",
-        line_color="red",
-    )
-    st.plotly_chart(fig_meta, use_container_width=True)
-
-
-
-
-st.subheader("📈 Análise por Critério Didático")
-
+# --- PREPARAÇÃO DOS DADOS DE AGRAGACÃO ---
 df_perguntas_mean = (
     df_filtrado[cols_perguntas]
     .mean()
@@ -213,6 +127,16 @@ df_perguntas_mean = (
 )
 df_perguntas_mean["Pergunta"] = df_perguntas_mean["Pergunta"].str.capitalize()
 df_perguntas_mean = df_perguntas_mean.sort_values(by="Média", ascending=True)
+
+df_comp = (
+    df_filtrado.groupby("componente_curricular")["notas"]
+    .mean()
+    .reset_index()
+    .sort_values(by="notas", ascending=True)
+)
+
+# --- VISUALIZAÇÕES PRINCIPAIS ---
+st.subheader("📈 Análise por Critério Didático")
 
 fig_perguntas = px.bar(
     df_perguntas_mean,
@@ -235,12 +159,6 @@ st.subheader("🔀 Desempenho por Turma e Componente Curricular")
 c1, c2 = st.columns(2)
 
 with c1:
-    df_comp = (
-        df_filtrado.groupby("componente_curricular")["notas"]
-        .mean()
-        .reset_index()
-        .sort_values(by="notas", ascending=True)
-    )
     fig_comp = px.bar(
         df_comp,
         x="notas",
@@ -279,7 +197,82 @@ with c2:
     )
     st.plotly_chart(fig_turma, use_container_width=True)
 
+# --- NOVOS GRÁFICOS ANALÍTICOS ---
+st.markdown("---")
+st.subheader("📊 Distribuição Global e Engajamento")
+
+col_g1, col_g2 = st.columns(2)
+
+with col_g1:
+    fig_hist = px.histogram(
+        df_filtrado,
+        x="notas",
+        nbins=10,
+        title="Distribuição Frequencial das Notas Globais",
+        labels={"notas": "Nota Atribuída", "count": "Quantidade de Respostas"},
+        color_discrete_sequence=["#2E86AB"],
+    )
+    fig_hist.update_layout(bargap=0.1)
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+with col_g2:
+    df_vol_turma = (
+        df_filtrado["turma"].value_counts().reset_index(name="quantidade")
+    )
+    fig_donut = px.pie(
+        df_vol_turma,
+        names="turma",
+        values="quantidade",
+        title="Proporção de Respostas por Turma",
+        hole=0.4,
+        color_discrete_sequence=px.colors.qualitative.Set3,
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+st.markdown("---")
+st.subheader("🎯 Comparativo de Performance com Meta")
+
+col_g3, col_g4 = st.columns(2)
+
+with col_g3:
+    if not df_perguntas_mean.empty:
+        fig_radar = px.line_polar(
+            df_perguntas_mean,
+            r="Média",
+            theta="Pergunta",
+            line_close=True,
+            title="Perfil Multidimensional de Satisfação (Radar)",
+            range_r=[0, 5],
+        )
+        fig_radar.update_traces(fill="toself")
+        st.plotly_chart(fig_radar, use_container_width=True)
+
+with col_g4:
+    fig_meta = px.bar(
+        df_comp,
+        x="componente_curricular",
+        y="notas",
+        title="Satisfação por Componente vs. Meta (4.0)",
+        labels={
+            "notas": "Média Atribuída",
+            "componente_curricular": "Componente",
+        },
+        text_auto=".2f",
+        color="notas",
+        color_continuous_scale="RdYlGn",
+        range_y=[0, 5],
+    )
+    fig_meta.add_hline(
+        y=4.0,
+        line_dash="dot",
+        annotation_text="Meta (4.0)",
+        annotation_position="bottom right",
+        line_color="red",
+    )
+    st.plotly_chart(fig_meta, use_container_width=True)
+
 # --- MAPA DE CALOR ---
+st.markdown("---")
 st.subheader("🔥 Mapa de Calor: Cruzamento Completo (Turma × Componente)")
 pivot_df = df_filtrado.pivot_table(
     index="componente_curricular", columns="turma", values="notas", aggfunc="mean"
@@ -314,7 +307,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏆 Conclusão Executiva",
 ])
 
-# --- TRATAMENTO CONTRA VALORES NAN NOS CRITÉRIOS ---
+# TRATAMENTO CONTRA VALORES NAN NOS CRITÉRIOS
 df_perguntas_validas = df_perguntas_mean.dropna(subset=["Média"])
 
 if not df_perguntas_validas.empty:
