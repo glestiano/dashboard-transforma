@@ -32,7 +32,7 @@ def load_data():
     else:
         df["componente_curricular"] = "Geral"
 
-    # Identificar colunas de perguntas (avaliações numéricas)
+    # Identificar colunas de perguntas (avaliações numéricas ou Likert)
     cols_perguntas = [
         col
         for col in df.columns
@@ -40,11 +40,35 @@ def load_data():
         and not col.startswith("componente_curricular.")
     ]
 
-    # Converter colunas de perguntas em número
+    # Mapeamento para garantir conversão se a planilha contiver respostas em texto (Likert)
+    mapeamento_likert = {
+        "pessimo": 1,
+        "péssimo": 1,
+        "ruim": 2,
+        "discordo totalmente": 1,
+        "discordo": 2,
+        "regular": 3,
+        "neutro": 3,
+        "bom": 4,
+        "concordo": 4,
+        "excelente": 5,
+        "concordo totalmente": 5,
+    }
+
+    # Converter colunas de perguntas em números válidos
     for col in cols_perguntas:
+        # Tenta substituir texto da escala Likert se houver
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .replace(mapeamento_likert)
+        )
+        # Converte para numérico coercitivamente (o que for inválido vira NaN)
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Criar nota média por resposta
+    # Criar nota média por linha de resposta
     df["notas"] = df[cols_perguntas].mean(axis=1)
 
     return df, cols_perguntas
@@ -82,9 +106,7 @@ st.markdown("---")
 
 # --- INDICADORES CHAVE (KPIs) ---
 total_respostas = len(df_filtrado)
-media_geral = (
-    df_filtrado["notas"].mean() if total_respostas > 0 else 0
-)
+media_geral = df_filtrado["notas"].mean() if total_respostas > 0 else 0
 satisfacao = (
     ((df_filtrado["notas"] >= 4).sum() / total_respostas * 100)
     if total_respostas > 0
@@ -210,63 +232,65 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏆 Conclusão Executiva",
 ])
 
-# Cálculo de dados dinâmicos para o relatório
-if not df_perguntas_mean.empty:
-    top_1_crit = df_perguntas_mean.iloc[-1]["Pergunta"]
-    top_1_val = df_perguntas_mean.iloc[-1]["Média"]
+# --- TRATAMENTO CONTRA VALORES NAN NOS CRITÉRIOS ---
+df_perguntas_validas = df_perguntas_mean.dropna(subset=["Média"])
+
+if not df_perguntas_validas.empty:
+    top_1_crit = df_perguntas_validas.iloc[-1]["Pergunta"]
+    top_1_val = df_perguntas_validas.iloc[-1]["Média"]
     top_2_crit = (
-        df_perguntas_mean.iloc[-2]["Pergunta"]
-        if len(df_perguntas_mean) > 1
-        else top_1_crit
+        df_perguntas_validas.iloc[-2]["Pergunta"]
+        if len(df_perguntas_validas) > 1
+        else "N/A"
     )
     top_2_val = (
-        df_perguntas_mean.iloc[-2]["Média"]
-        if len(df_perguntas_mean) > 1
-        else top_1_val
+        df_perguntas_validas.iloc[-2]["Média"]
+        if len(df_perguntas_validas) > 1
+        else 0.0
     )
     top_3_crit = (
-        df_perguntas_mean.iloc[-3]["Pergunta"]
-        if len(df_perguntas_mean) > 2
-        else top_1_crit
+        df_perguntas_validas.iloc[-3]["Pergunta"]
+        if len(df_perguntas_validas) > 2
+        else "N/A"
     )
     top_3_val = (
-        df_perguntas_mean.iloc[-3]["Média"]
-        if len(df_perguntas_mean) > 2
-        else top_1_val
+        df_perguntas_validas.iloc[-3]["Média"]
+        if len(df_perguntas_validas) > 2
+        else 0.0
     )
 
-    bot_1_crit = df_perguntas_mean.iloc[0]["Pergunta"]
-    bot_1_val = df_perguntas_mean.iloc[0]["Média"]
+    bot_1_crit = df_perguntas_validas.iloc[0]["Pergunta"]
+    bot_1_val = df_perguntas_validas.iloc[0]["Média"]
     bot_2_crit = (
-        df_perguntas_mean.iloc[1]["Pergunta"]
-        if len(df_perguntas_mean) > 1
-        else bot_1_crit
+        df_perguntas_validas.iloc[1]["Pergunta"]
+        if len(df_perguntas_validas) > 1
+        else "N/A"
     )
     bot_2_val = (
-        df_perguntas_mean.iloc[1]["Média"]
-        if len(df_perguntas_mean) > 1
-        else bot_1_val
+        df_perguntas_validas.iloc[1]["Média"]
+        if len(df_perguntas_validas) > 1
+        else 0.0
     )
     bot_3_crit = (
-        df_perguntas_mean.iloc[2]["Pergunta"]
-        if len(df_perguntas_mean) > 2
-        else bot_1_crit
+        df_perguntas_validas.iloc[2]["Pergunta"]
+        if len(df_perguntas_validas) > 2
+        else "N/A"
     )
     bot_3_val = (
-        df_perguntas_mean.iloc[2]["Média"]
-        if len(df_perguntas_mean) > 2
-        else bot_1_val
+        df_perguntas_validas.iloc[2]["Média"]
+        if len(df_perguntas_validas) > 2
+        else 0.0
     )
 else:
     top_1_crit = top_2_crit = top_3_crit = bot_1_crit = bot_2_crit = (
         bot_3_crit
-    ) = "N/A"
+    ) = "Sem dados numéricos suficientes"
     top_1_val = top_2_val = top_3_val = bot_1_val = bot_2_val = bot_3_val = 0.0
 
 with tab1:
     st.subheader("📌 Visão Geral")
     st.write(
-        f"**Objetivo do Dashboard:** Monitorar, cruzar e analisar a percepção de qualidade pedagógica e a satisfação dos participantes do programa **Transforma 2026**."
+        "**Objetivo do Dashboard:** Monitorar, cruzar e analisar a percepção de qualidade pedagógica e a satisfação dos participantes do programa **Transforma 2026**."
     )
     st.markdown(f"""
     * **Volume de Respostas:** Total consolidado de **{total_respostas:,}** avaliações registradas.
@@ -328,7 +352,7 @@ with tab5:
     7. **Prevenção de Evasão (Risco):** Turmas com média geral abaixo do esperado exigem atuação direta da tutoria.
     8. **Feedback Contínuo:** A percepção do aluno sobre as orientações de atividades impacta diretamente na satisfação do módulo.
     9. **Replicabilidade de Boas Práticas:** Práticas do componente melhor avaliado devem ser padronizadas para os demais.
-    10. **Alineação com Mercado:** Conteúdos práticos alinhados aos desafios reais mantêm notas elevadas.
+    10. **Alinhamento com Mercado:** Conteúdos práticos alinhados aos desafios reais mantêm notas elevadas.
     """)
 
 with tab6:
