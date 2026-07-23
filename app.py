@@ -11,14 +11,26 @@ st.set_page_config(
 # Carregamento de Dados
 @st.cache_data
 def load_data():
-    # Carrega a planilha (garanta que o nome do arquivo corresponda ao seu)
     df = pd.read_excel("dados.xlsx")
 
-    # Padronização dos nomes das colunas para minúsculas para evitar erros
-    df.columns = df.columns.str.strip().str.lower()
+    # Limpa espaços extras e padroniza tudo para minúsculas
+    df.columns = [str(col).strip().lower() for col in df.columns]
 
-    # Garantir que a coluna de notas é numérica
-    df["notas"] = pd.to_numeric(df["notas"], errors="coerce")
+    # Mapeia possíveis variações nos nomes das colunas
+    col_map = {}
+    for col in df.columns:
+        if "nota" in col:
+            col_map[col] = "notas"
+        elif "turma" in col:
+            col_map[col] = "turma"
+        elif "componente" in col or "materia" in col or "disciplina" in col:
+            col_map[col] = "componente curricular"
+
+    df = df.rename(columns=col_map)
+
+    # Garantir que a coluna 'notas' existe e é numérica
+    if "notas" in df.columns:
+        df["notas"] = pd.to_numeric(df["notas"], errors="coerce")
 
     return df
 
