@@ -77,7 +77,7 @@ if componente_selecionado != "Todos":
     ]
 
 # --- TÍTULO PRINCIPAL ---
-st.title("📊 Dashboard de Avaliação de Cursos")
+st.title("📊 Dashboard de Avaliação de Cursos - Transforma")
 st.markdown("---")
 
 # --- INDICADORES CHAVE (KPIs) ---
@@ -99,9 +99,8 @@ col3.metric("Taxa de Satisfação (Notas ≥ 4)", f"{satisfacao:.1f}%")
 st.markdown("---")
 
 # --- VISUALIZAÇÕES PRINCIPAIS ---
-st.subheader("📈 Análise de Satisfação por Pergunta")
+st.subheader("📈 Análise de Satisfação por Critério Didático")
 
-# Média individual de cada pergunta do formulário
 df_perguntas_mean = (
     df_filtrado[cols_perguntas]
     .mean()
@@ -167,7 +166,7 @@ with c2:
         df_turma_mean,
         x="turma",
         y="notas",
-        title="Média Geral por Turma",
+        title="Média Geral por Turma (Top 10)",
         labels={"turma": "Turma", "notas": "Nota Média"},
         text_auto=".2f",
         color="notas",
@@ -177,7 +176,7 @@ with c2:
     st.plotly_chart(fig_turma, use_container_width=True)
 
 # --- MAPA DE CALOR ---
-st.subheader("🔥 Mapa de Calor: Média de Notas (Turma × Componente)")
+st.subheader("🔥 Mapa de Calor: Cruzamento Completo (Turma × Componente)")
 pivot_df = df_filtrado.pivot_table(
     index="componente_curricular", columns="turma", values="notas", aggfunc="mean"
 )
@@ -193,3 +192,39 @@ if not pivot_df.empty:
         aspect="auto",
     )
     st.plotly_chart(fig_heatmap, use_container_width=True)
+
+st.markdown("---")
+
+# =========================================================
+# 📌 NOVA SEÇÃO: INSIGHTS & SÍNTESE PARA A APRESENTAÇÃO
+# =========================================================
+st.subheader("💡 Resumo Executivo para Apresentação")
+
+if not df_perguntas_mean.empty:
+    melhor_criterio = df_perguntas_mean.iloc[-1]["Pergunta"]
+    melhor_nota = df_perguntas_mean.iloc[-1]["Média"]
+    pior_criterio = df_perguntas_mean.iloc[0]["Pergunta"]
+    pior_nota = df_perguntas_mean.iloc[0]["Média"]
+
+    col_ins1, col_ins2 = st.columns(2)
+
+    with col_ins1:
+        st.success(
+            f"**🌟 Maior Destaque Didático:**\n\n"
+            f"• **Critério:** {melhor_criterio}\n\n"
+            f"• **Pontuação:** **{melhor_nota:.2f} / 5.00**"
+        )
+
+    with col_ins2:
+        st.warning(
+            f"**⚠️ Ponto de Atenção / Oportunidade:**\n\n"
+            f"• **Critério:** {pior_criterio}\n\n"
+            f"• **Pontuação:** **{pior_nota:.2f} / 5.00**"
+        )
+
+    st.info(
+        f"**🗣️ Guiro de Apresentação:**\n\n"
+        f"O curso apresenta um nível geral de satisfação de **{satisfacao:.1f}%**, com média **{media_geral:.2f}**. "
+        f"O principal ponto forte percebido pelos alunos é **'{melhor_criterio}'**. Por outro lado, a principal oportunidade de alinhamento pedagógico "
+        f"está no critério **'{pior_criterio}'**."
+    )
